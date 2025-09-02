@@ -4,65 +4,96 @@
 <meta charset="UTF-8">
 <title>Brainrot Finder Dashboard</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #1c1c1c;
-        color: #fff;
-        margin: 0;
-        padding: 0;
-    }
-    header {
-        background: #00ffe0;
-        color: #000;
-        text-align: center;
-        padding: 16px;
-        font-size: 24px;
-        font-weight: bold;
-    }
-    #controls {
-        padding: 12px;
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        justify-content: center;
-        background: rgba(255,255,255,0.05);
-    }
-    #output {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        padding: 12px;
-        justify-content: center;
-    }
-    .server-card {
-        background: rgba(0,255,224,0.1);
-        border: 1px solid #00ffe0;
-        border-radius: 8px;
-        padding: 12px;
-        width: 220px;
-        text-align: center;
-    }
-    .server-card a {
-        color: #00ffe0;
-        text-decoration: none;
-        font-weight: bold;
-    }
-    .server-card a:hover {
-        text-decoration: underline;
-    }
-    button.copy-btn {
-        margin-top: 6px;
-        padding: 6px 12px;
-        border: none;
-        border-radius: 4px;
-        background: #00ffe0;
-        color: #000;
-        cursor: pointer;
-    }
-    button.copy-btn:hover {
-        background: #00ccaa;
-        color: #fff;
-    }
+body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1c1c1c);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+    color: #fff;
+}
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(10px); }
+}
+header {
+    background: rgba(255,255,255,0.05);
+    padding: 20px;
+    text-align: center;
+    font-size: 26px;
+    color: #00ffe0;
+    box-shadow: 0 0 12px #00ffe0;
+    backdrop-filter: blur(10px);
+}
+#dashboard {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 12px;
+}
+.entry {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 12px 16px;
+    margin: 6px;
+    border-radius: 10px;
+    flex: 0 0 250px;
+    animation: fadeIn 0.3s ease-in;
+}
+.entry:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 10px #00ffe0;
+    transition: transform 0.2s ease;
+}
+.fade-out {
+    animation: fadeOut 0.5s ease forwards;
+}
+.copy-btn {
+    background: #00ffe0;
+    color: #000;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 6px;
+}
+.copy-btn:hover {
+    background: #00ccaa;
+    color: #fff;
+}
+.meta-block {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.4s ease;
+    margin-top: 8px;
+    background: rgba(0,0,0,0.3);
+    padding: 8px;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    font-size: 12px;
+}
+.meta-block.show {
+    max-height: 500px;
+    opacity: 1;
+}
+#controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
 </style>
 </head>
 <body>
@@ -70,55 +101,82 @@
 
 <div id="controls">
     <label>Refresh rate:
-        <select id="refreshRate">
+        <select id="speed">
+            <option value="100">100ms</option>
             <option value="1000">1s</option>
-            <option value="2000">2s</option>
-            <option value="5000">5s</option>
+            <option value="3000">3s</option>
         </select>
     </label>
-    <label><input type="checkbox" id="hideFull"> Hide full servers</label>
+    <label><input type="checkbox" id="hideFull"> Hide Full Servers</label>
 </div>
 
-<div id="output"></div>
+<div id="dashboard"></div>
 
 <script>
-const API_URL = "/api/data"; // relative path to your API
-let refreshInterval = parseInt(document.getElementById("refreshRate").value);
+let interval = 100;
 let timer;
+let printedData = [];
 
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text);
-    alert("Copied link to clipboard!");
+function copyToClipboard(link) {
+    navigator.clipboard.writeText(link);
+}
+
+function toggleMeta(jobId) {
+    const block = document.getElementById(`meta-${jobId}`);
+    block.classList.toggle("show");
 }
 
 function render(data) {
+    const dashboard = document.getElementById("dashboard");
     const hideFull = document.getElementById("hideFull").checked;
-    const out = document.getElementById("output");
-    out.innerHTML = "";
 
-    data.forEach(server => {
-        const [players, max] = server.players.split("/").map(Number);
-        if (hideFull && players >= max) return;
+    data.forEach(s => {
+        const [p, max] = s.players.split("/").map(Number);
+        if (hideFull && p === max) return;
 
-        const card = document.createElement("div");
-        card.className = "server-card";
-        card.innerHTML = `
-            <div><b>${server.name}</b></div>
-            <div>Players: ${server.players}</div>
-            <div>Time: ${server.timestamp}</div>
-            <a href="${server.link}" target="_blank">Join Server</a>
-            <br>
-            <button class="copy-btn" onclick="copyToClipboard('${server.link}')">Copy Link</button>
-        `;
-        out.appendChild(card);
+        let div = document.querySelector(`.entry[data-jobid="${s.jobId}"]`);
+        const meta = JSON.stringify({ name: s.name, jobId: s.jobId, placeId: s.placeId }, null, 2);
+
+        if (div) {
+            div.querySelector(".server-info").innerHTML =
+                `[${s.timestamp}] <b>${s.name}</b> | ${s.players} → <a href="${s.link}" target="_blank">Join</a>`;
+        } else {
+            div = document.createElement("div");
+            div.className = "entry";
+            div.setAttribute("data-jobid", s.jobId);
+            div.setAttribute("data-created", s.created);
+            div.innerHTML = `
+                <div class="server-info">[${s.timestamp}] <b>${s.name}</b> | ${s.players} → <a href="${s.link}" target="_blank">Join</a></div>
+                <div>
+                    <button class="copy-btn" onclick="copyToClipboard('${s.link}')">Copy</button>
+                    <button class="copy-btn" onclick="toggleMeta('${s.jobId}')">Details</button>
+                </div>
+                <pre class="meta-block" id="meta-${s.jobId}">${meta}</pre>
+            `;
+            dashboard.appendChild(div);
+        }
+    });
+}
+
+function cleanupOldEntries() {
+    const entries = document.querySelectorAll(".entry");
+    const now = Date.now();
+    entries.forEach(entry => {
+        const created = parseInt(entry.getAttribute("data-created"), 10);
+        if (now - created > 180000 && !entry.classList.contains("fade-out")) {
+            entry.classList.add("fade-out");
+            setTimeout(() => entry.remove(), 300);
+        }
     });
 }
 
 async function fetchData() {
     try {
-        const res = await fetch(API_URL);
+        const res = await fetch("/api/data");
         const data = await res.json();
+        printedData = data;
         render(data);
+        cleanupOldEntries();
     } catch (e) {
         console.error("Error fetching data:", e);
     }
@@ -126,11 +184,11 @@ async function fetchData() {
 
 function updateInterval() {
     clearInterval(timer);
-    refreshInterval = parseInt(document.getElementById("refreshRate").value);
-    timer = setInterval(fetchData, refreshInterval);
+    interval = parseInt(document.getElementById("speed").value, 10);
+    timer = setInterval(fetchData, interval);
 }
 
-document.getElementById("refreshRate").addEventListener("change", updateInterval);
+document.getElementById("speed").addEventListener("change", updateInterval);
 document.getElementById("hideFull").addEventListener("change", fetchData);
 
 updateInterval();
