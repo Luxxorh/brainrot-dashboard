@@ -1,8 +1,8 @@
 {
   "name": "brainrot-checker",
   "version": "1.0.0",
-  "private": true,
+  "type": "module",
   "dependencies": {
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^3.3.2"
   }
 }
