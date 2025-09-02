@@ -134,107 +134,108 @@ select, input[type="checkbox"] {
 </style>
 </head>
 <body>
-    <header>🧠 Brainrot Finder Dashboard</header>
-    <div id="dashboard">
-        <div class="panel" id="live">
-            <h3>🔍 Live Servers</h3>
-            <div id="output"></div>
-        </div>
-        <div class="panel" id="stats">
-            <h3>📊 Stats</h3>
-            <div id="statBlock">Loading...</div>
-        </div>
-        <div class="panel" id="settings">
-            <h3>⚙️ Settings</h3>
-            <label>Refresh Rate:</label>
-            <select id="speed">
-                <option value="100">100ms</option>
-                <option value="1000">1s</option>
-                <option value="3000">3s</option>
-            </select><br>
-            <label><input type="checkbox" id="hideFull"> Hide Full Servers</label>
-        </div>
+  <header>🧠 Brainrot Finder Dashboard</header>
+  <div id="dashboard">
+    <div class="panel" id="live">
+      <h3>🔍 Live Servers</h3>
+      <div id="output"></div>
     </div>
-    <script>
-        let interval = 50;
-        let timer;
+    <div class="panel" id="stats">
+      <h3>📊 Stats</h3>
+      <div id="statBlock">Loading...</div>
+    </div>
+    <div class="panel" id="settings">
+      <h3>⚙️ Settings</h3>
+      <label>Refresh Rate:</label>
+      <select id="speed">
+        <option value="100">100ms</option>
+        <option value="1000">1s</option>
+        <option value="3000">3s</option>
+      </select><br>
+      <label><input type="checkbox" id="hideFull"> Hide Full Servers</label>
+    </div>
+  </div>
 
-        function copyToClipboard(link) {
-            navigator.clipboard.writeText(link);
+  <script>
+    let interval = 50;
+    let timer;
+
+    function copyToClipboard(link) {
+      navigator.clipboard.writeText(link);
+    }
+
+    function toggleMeta(jobId) {
+      const block = document.getElementById(`meta-${jobId}`);
+      block.classList.toggle("show");
+    }
+
+    function render(data) {
+      const out = document.getElementById("output");
+      const hideFull = document.getElementById("hideFull").checked;
+
+      data.forEach(s => {
+        const [p, max] = s.players.split("/").map(Number);
+        if (hideFull && p === max) return;
+
+        let div = document.querySelector(`.entry[data-jobid="${s.jobId}"]`);
+        const meta = JSON.stringify({ name: s.name, jobId: s.jobId, placeId: s.placeId }, null, 2);
+
+        if (div) {
+          div.querySelector(".server-info").innerHTML =
+            `[${s.timestamp}] <b>${s.name}</b> | ${s.players} → <a href="${s.link}" target="_blank">Join</a>`;
+        } else {
+          div = document.createElement("div");
+          div.className = "entry";
+          div.setAttribute("data-jobid", s.jobId);
+          div.setAttribute("data-created", s.created);
+          div.innerHTML = `
+            <div class="server-info">[${s.timestamp}] <b>${s.name}</b> | ${s.players} → <a href="${s.link}" target="_blank">Join</a></div>
+            <div>
+              <button class="copy-btn" onclick="copyToClipboard('${s.link}')">Copy</button>
+              <button class="copy-btn" onclick="toggleMeta('${s.jobId}')">Details</button>
+            </div>
+            <pre class="meta-block" id="meta-${s.jobId}">${meta}</pre>
+          `;
+          out.appendChild(div);
         }
+      });
 
-        function toggleMeta(jobId) {
-            const block = document.getElementById(`meta-${jobId}`);
-            block.classList.toggle("show");
+      document.getElementById("statBlock").innerHTML = `
+        <p>Total Brainrot Servers Found: <b>${document.querySelectorAll(".entry").length}</b></p>
+        <p>Last Refresh Rate: <b>${interval}ms</b></p>
+      `;
+    }
+
+    function cleanupOldEntries() {
+      const entries = document.querySelectorAll(".entry");
+      const now = Date.now();
+      entries.forEach(entry => {
+        const created = parseInt(entry.getAttribute("data-created"), 10);
+        if (now - created > 180000 && !entry.classList.contains("fade-out")) {
+          entry.classList.add("fade-out");
+          setTimeout(() => entry.remove(), 300);
         }
+      });
+    }
 
-        function render(data) {
-            const out = document.getElementById("output");
-            const hideFull = document.getElementById("hideFull").checked;
+    async function fetchData() {
+      const res = await fetch("/api/data");
+      const data = await res.json();
+      render(data);
+      cleanupOldEntries();
+    }
 
-            data.forEach(s => {
-                const [p, max] = s.players.split("/").map(Number);
-                if (hideFull && p === max) return;
+    function updateInterval() {
+      clearInterval(timer);
+      interval = parseInt(document.getElementById("speed").value, 10);
+      timer = setInterval(fetchData, interval);
+    }
 
-                let div = document.querySelector(`.entry[data-jobid="${s.jobId}"]`);
-                const meta = JSON.stringify({ name: s.name, jobId: s.jobId, placeId: s.placeId }, null, 2);
+    document.getElementById("speed").addEventListener("change", updateInterval);
+    document.getElementById("hideFull").addEventListener("change", fetchData);
 
-                if (div) {
-                    div.querySelector(".server-info").innerHTML =
-                        `[${s.timestamp}] <b>${s.name}</b> | ${s.players} → <a href="${s.link}" target="_blank">Join</a>`;
-                } else {
-                    div = document.createElement("div");
-                    div.className = "entry";
-                    div.setAttribute("data-jobid", s.jobId);
-                    div.setAttribute("data-created", s.created);
-                    div.innerHTML = `
-                        <div class="server-info">[${s.timestamp}] <b>${s.name}</b> | ${s.players} → <a href="${s.link}" target="_blank">Join</a></div>
-                        <div>
-                            <button class="copy-btn" onclick="copyToClipboard('${s.link}')">Copy</button>
-                            <button class="copy-btn" onclick="toggleMeta('${s.jobId}')">Details</button>
-                        </div>
-                        <pre class="meta-block" id="meta-${s.jobId}">${meta}</pre>
-                    `;
-                    out.appendChild(div);
-                }
-            });
-
-            document.getElementById("statBlock").innerHTML = `
-                <p>Total Brainrot Servers Found: <b>${document.querySelectorAll(".entry").length}</b></p>
-                <p>Last Refresh Rate: <b>${interval}ms</b></p>
-            `;
-        }
-
-        function cleanupOldEntries() {
-            const entries = document.querySelectorAll(".entry");
-            const now = Date.now();
-            entries.forEach(entry => {
-                const created = parseInt(entry.getAttribute("data-created"), 10);
-                if (now - created > 180000 && !entry.classList.contains("fade-out")) {
-                    entry.classList.add("fade-out");
-                    setTimeout(() => entry.remove(), 300);
-                }
-            });
-        }
-
-        async function fetchData() {
-            const res = await fetch("/api/data"); // <- changed URL for Vercel
-            const data = await res.json();
-            render(data);
-            cleanupOldEntries();
-        }
-
-        function updateInterval() {
-            clearInterval(timer);
-            interval = parseInt(document.getElementById("speed").value, 10);
-            timer = setInterval(fetchData, interval);
-        }
-
-        document.getElementById("speed").addEventListener("change", updateInterval);
-        document.getElementById("hideFull").addEventListener("change", fetchData);
-
-        updateInterval();
-        fetchData();
-    </script>
+    updateInterval();
+    fetchData();
+  </script>
 </body>
 </html>
