@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, render_template_string
-from vercel_wsgi import handle_wsgi_app
 import requests
 from datetime import datetime
 import time
@@ -325,4 +324,4 @@ def data():
     return jsonify(printed_data)
 
 def handler(environ, start_response):
-    return handle_wsgi_app(app, environ, start_response)
+    return app(environ, start_response)
