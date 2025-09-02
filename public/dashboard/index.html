@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Brainrot Finder Dashboard</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #1c1c1c;
+        color: #fff;
+        margin: 0;
+        padding: 0;
+    }
+    header {
+        background: #00ffe0;
+        color: #000;
+        text-align: center;
+        padding: 16px;
+        font-size: 24px;
+        font-weight: bold;
+    }
+    #controls {
+        padding: 12px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.05);
+    }
+    #output {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 12px;
+        justify-content: center;
+    }
+    .server-card {
+        background: rgba(0,255,224,0.1);
+        border: 1px solid #00ffe0;
+        border-radius: 8px;
+        padding: 12px;
+        width: 220px;
+        text-align: center;
+    }
+    .server-card a {
+        color: #00ffe0;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    .server-card a:hover {
+        text-decoration: underline;
+    }
+    button.copy-btn {
+        margin-top: 6px;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        background: #00ffe0;
+        color: #000;
+        cursor: pointer;
+    }
+    button.copy-btn:hover {
+        background: #00ccaa;
+        color: #fff;
+    }
+</style>
+</head>
+<body>
+<header>🧠 Brainrot Finder Dashboard</header>
+
+<div id="controls">
+    <label>Refresh rate:
+        <select id="refreshRate">
+            <option value="1000">1s</option>
+            <option value="2000">2s</option>
+            <option value="5000">5s</option>
+        </select>
+    </label>
+    <label><input type="checkbox" id="hideFull"> Hide full servers</label>
+</div>
+
+<div id="output"></div>
+
+<script>
+const API_URL = "/api/data"; // relative path to your API
+let refreshInterval = parseInt(document.getElementById("refreshRate").value);
+let timer;
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text);
+    alert("Copied link to clipboard!");
+}
+
+function render(data) {
+    const hideFull = document.getElementById("hideFull").checked;
+    const out = document.getElementById("output");
+    out.innerHTML = "";
+
+    data.forEach(server => {
+        const [players, max] = server.players.split("/").map(Number);
+        if (hideFull && players >= max) return;
+
+        const card = document.createElement("div");
+        card.className = "server-card";
+        card.innerHTML = `
+            <div><b>${server.name}</b></div>
+            <div>Players: ${server.players}</div>
+            <div>Time: ${server.timestamp}</div>
+            <a href="${server.link}" target="_blank">Join Server</a>
+            <br>
+            <button class="copy-btn" onclick="copyToClipboard('${server.link}')">Copy Link</button>
+        `;
+        out.appendChild(card);
+    });
+}
+
+async function fetchData() {
+    try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        render(data);
+    } catch (e) {
+        console.error("Error fetching data:", e);
+    }
+}
+
+function updateInterval() {
+    clearInterval(timer);
+    refreshInterval = parseInt(document.getElementById("refreshRate").value);
+    timer = setInterval(fetchData, refreshInterval);
+}
+
+document.getElementById("refreshRate").addEventListener("change", updateInterval);
+document.getElementById("hideFull").addEventListener("change", fetchData);
+
+updateInterval();
+fetchData();
+</script>
+</body>
+</html>
