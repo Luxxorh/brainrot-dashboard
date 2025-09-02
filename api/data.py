@@ -62,15 +62,11 @@ def fetch_live_servers():
     except Exception:
         return []
 
-# Vercel serverless handler
 def handler(environ, start_response):
     data = fetch_live_servers()
     body = json.dumps(data).encode("utf-8")
-
-    status = '200 OK'
-    headers = [
-        ('Content-Type', 'application/json'),
-        ('Content-Length', str(len(body)))
-    ]
-    start_response(status, headers)
+    start_response("200 OK", [
+        ("Content-Type", "application/json"),
+        ("Content-Length", str(len(body)))
+    ])
     return [body]
