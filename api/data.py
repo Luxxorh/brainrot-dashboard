@@ -1,9 +1,7 @@
-from flask import Flask, jsonify
+import json
 import requests
 from datetime import datetime
 import time
-
-app = Flask(__name__)
 
 URL = "https://brainrotss.up.railway.app/brainrots"
 MAX_PLAYERS = 8
@@ -15,7 +13,6 @@ HEADERS = {
 
 def fetch_live_servers():
     try:
-        # Fetch server list from Railway
         resp = requests.get(URL, headers=HEADERS, timeout=1)
         data = resp.json() if resp.status_code == 200 else []
         if not data:
@@ -60,11 +57,20 @@ def fetch_live_servers():
             except Exception:
                 continue
 
-        return updated[:100]  # limit to 100 servers
+        return updated[:100]
 
     except Exception:
         return []
 
-@app.route("/data")
-def data():
-    return jsonify(fetch_live_servers())
+# Vercel serverless handler
+def handler(environ, start_response):
+    data = fetch_live_servers()
+    body = json.dumps(data).encode("utf-8")
+
+    status = '200 OK'
+    headers = [
+        ('Content-Type', 'application/json'),
+        ('Content-Length', str(len(body)))
+    ]
+    start_response(status, headers)
+    return [body]
