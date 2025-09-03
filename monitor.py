@@ -6,7 +6,7 @@ BRAINROTS_URL = "https://brainrotss.up.railway.app/brainrots"
 ROBLOX_API_TEMPLATE = "https://games.roblox.com/v1/games/109983668079237/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true"
 
 # Polling interval in seconds (750ms)
-POLL_INTERVAL = 0.75
+POLL_INTERVAL = 1
 
 # Headers to mimic a browser request
 HEADERS = {
