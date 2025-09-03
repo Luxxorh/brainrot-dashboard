@@ -82,6 +82,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-type', content_type)
         self.end_headers()
 
+    # Handle HEAD requests (required by some platforms like Render)
+    def do_HEAD(self):
+        parsed_path = urlparse(self.path)
+        if parsed_path.path in ["/", "/api/data"]:
+            content_type = "text/html" if parsed_path.path == "/" else "application/json"
+            self._set_headers(content_type)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def do_GET(self):
         parsed_path = urlparse(self.path)
         if parsed_path.path == "/":
