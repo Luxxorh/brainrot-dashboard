@@ -82,7 +82,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-type', content_type)
         self.end_headers()
 
-    # Handle HEAD requests (required by some platforms like Render)
+    def safe_write(self, data: bytes):
+        try:
+            self.wfile.write(data)
+        except BrokenPipeError:
+            # Client disconnected early — ignore
+            pass
+
     def do_HEAD(self):
         parsed_path = urlparse(self.path)
         if parsed_path.path in ["/", "/api/data"]:
@@ -97,22 +103,23 @@ class Handler(BaseHTTPRequestHandler):
         if parsed_path.path == "/":
             self._set_headers("text/html")
             with open("dashboard.html", "r", encoding="utf-8") as f:
-                self.wfile.write(f.read().encode())
+                self.safe_write(f.read().encode())
         elif parsed_path.path == "/api/data":
             self._set_headers("application/json")
             data = asyncio.run(poll_live_players())
-            self.wfile.write(json.dumps(data).encode())
+            self.safe_write(json.dumps(data).encode())
         else:
             self.send_response(404)
             self.end_headers()
-            self.wfile.write(b"404 Not Found")
+            self.safe_write(b"404 Not Found")
 
 # ---------------- Main ----------------
 def run(server_class=HTTPServer, handler_class=Handler, port=None):
+    # Render requires $PORT
     port = int(port or os.environ.get("PORT", 5000))
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f"Async server running at http://0.0.0.0:{port}")
+    print(f"Server running at http://0.0.0.0:{port}")
     httpd.serve_forever()
 
 if __name__ == "__main__":
