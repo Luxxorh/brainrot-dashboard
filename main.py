@@ -6,7 +6,21 @@ app = Flask(__name__)
 BRAINROT_URL = "https://brainrotss.up.railway.app/brainrots"
 ROBLOX_API_TEMPLATE = "https://games.roblox.com/v1/games/{}/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true"
 
-@app.route("/matched-brainrots", methods=["GET"])
+# ✅ Root route to confirm service is alive
+@app.route("/", methods=["GET"])
+def index():
+    return {
+        "status": "🧠 Brainrot Checker is live",
+        "usage": "Use GET /brainrots for matched server data"
+    }
+
+# ✅ Silence favicon.ico requests
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
+
+# 🔍 Core logic for matching brainrots
+@app.route("/brainrots", methods=["GET"])
 def get_matched_brainrots():
     try:
         brainrot_data = requests.get(BRAINROT_URL).json()
@@ -39,3 +53,7 @@ def get_matched_brainrots():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# 🧪 Optional: Local debug mode
+if __name__ == "__main__":
+    app.run(debug=True)
