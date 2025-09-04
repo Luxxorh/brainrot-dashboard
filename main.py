@@ -53,7 +53,3 @@ def get_matched_brainrots():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# 🧪 Optional: Local debug mode
-if __name__ == "__main__":
-    app.run(debug=True)
