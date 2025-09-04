@@ -72,8 +72,12 @@ def poll_roblox_and_match():
             print("Matching error:", e)
         time.sleep(1.5)
 
-threading.Thread(target=poll_brainrot, daemon=True).start()
-threading.Thread(target=poll_roblox_and_match, daemon=True).start()
+# ✅ Gunicorn-safe thread startup
+def start_threads():
+    threading.Thread(target=poll_brainrot, daemon=True).start()
+    threading.Thread(target=poll_roblox_and_match, daemon=True).start()
+
+start_threads()
 
 @app.route("/", methods=["GET"])
 def index():
