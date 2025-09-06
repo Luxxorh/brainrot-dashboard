@@ -14,7 +14,8 @@ app = Flask(__name__)
 # Global variables to store the fetched data
 brainrots_data = []
 last_update_time = None
-update_interval = int(os.environ.get('UPDATE_INTERVAL', 2))  # Update brainrot data every 2 seconds
+update_interval = int(os.environ.get('UPDATE_INTERVAL', 30))  # Increased to 30 seconds for Render
+data_lock = threading.Lock()
 
 # Comprehensive list of User Agents to rotate through
 USER_AGENTS = [
@@ -67,7 +68,7 @@ def fetch_brainrots_data():
     """Fetch data from the brainrots endpoint"""
     try:
         headers = get_headers()
-        response = requests.get("https://brainrotss.up.railway.app/brainrots", timeout=5, headers=headers)
+        response = requests.get("https://brainrotss.up.railway.app/brainrots", timeout=10, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -82,9 +83,12 @@ def update_brainrots_data():
         try:
             new_brainrots = fetch_brainrots_data()
             if new_brainrots:
-                brainrots_data = new_brainrots
+                with data_lock:
+                    brainrots_data = new_brainrots
                 last_update_time = datetime.now()
                 print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+            else:
+                print("No data received from brainrots API")
         except Exception as e:
             print(f"Error updating brainrots data: {e}")
 
@@ -94,9 +98,12 @@ def process_data():
     """Process brainrots data"""
     global brainrots_data
 
+    with data_lock:
+        current_data = brainrots_data.copy()
+
     processed_data = []
 
-    for brainrot in brainrots_data:
+    for brainrot in current_data:
         job_id = brainrot.get("jobId")
         server_id = brainrot.get("serverId")
 
@@ -210,14 +217,32 @@ def stats_api():
         "update_interval": update_interval
     })
 
-# Start the data update thread only if not in a subprocess (like gunicorn workers)
-if not os.environ.get("WERKZEUG_RUN_MAIN") and not os.environ.get("GUNICORN_WORKER"):
-    # Check if we're in the main thread to avoid starting multiple threads in gunicorn workers
-    if os.environ.get("GUNICORN_WORKER_CLASS") is None and threading.current_thread() is threading.main_thread():
-        brainrot_thread = threading.Thread(target=update_brainrots_data)
+# Initialize data on startup
+def initialize_data():
+    """Fetch initial data when the app starts"""
+    global brainrots_data, last_update_time
+    print("Fetching initial brainrot data...")
+    initial_data = fetch_brainrots_data()
+    if initial_data:
+        brainrots_data = initial_data
+        last_update_time = datetime.now()
+        print(f"Initial data fetched. Servers: {len(brainrots_data)}")
+    else:
+        print("Failed to fetch initial data")
+
+# Start the data update thread
+def start_background_thread():
+    """Start the background thread for data updates"""
+    # Only start if not already running and not in a gunicorn worker
+    if not any(thread.name == "brainrot_updater" for thread in threading.enumerate()):
+        brainrot_thread = threading.Thread(target=update_brainrots_data, name="brainrot_updater")
         brainrot_thread.daemon = True
         brainrot_thread.start()
         print("Started brainrot data update thread")
+
+# Initialize data and start thread when the app starts
+initialize_data()
+start_background_thread()
 
 if __name__ == '__main__':
     # Use PORT environment variable if available, otherwise default to 5000
