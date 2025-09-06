@@ -355,15 +355,17 @@
     </div>
 
     <script>
-        let autoRefreshEnabled = true;
-        let refreshInterval = {{ update_interval }} * 1000; // Convert to milliseconds
-        let refreshTimer;
-        let nextUpdateTime = new Date();
+    let autoRefreshEnabled = true;
+    let refreshInterval = {{ update_interval }} * 1000; // Convert to milliseconds
+    let refreshTimer;
+    let nextUpdateTime = new Date();
+    let countdownInterval;
+    
+    // Format the last update time relative to now
+    function formatRelativeTime(dateString) {
+        if (!dateString || dateString === "Never") return "Never";
         
-        // Format the last update time relative to now
-        function formatRelativeTime(dateString) {
-            if (!dateString || dateString === "Never") return "Never";
-            
+        try {
             const updateTime = new Date(dateString);
             const now = new Date();
             const diffInSeconds = Math.floor((now - updateTime) / 1000);
@@ -377,183 +379,198 @@
                 const hours = Math.floor(diffInSeconds / 3600);
                 return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
             }
+        } catch (e) {
+            return "Unknown";
+        }
+    }
+    
+    // Update the next update time countdown
+    function updateNextUpdateTime() {
+        const now = new Date();
+        const timeUntilUpdate = nextUpdateTime - now;
+        
+        if (timeUntilUpdate <= 0) {
+            // Time for an update
+            document.getElementById('next-update-time').textContent = 'Updating...';
+            nextUpdateTime = new Date(now.getTime() + refreshInterval);
+        } else {
+            const seconds = Math.floor(timeUntilUpdate / 1000);
+            document.getElementById('next-update-time').textContent = `${seconds}s`;
+        }
+    }
+    
+    // Update the relative time displays
+    function updateRelativeTimes() {
+        const lastUpdateElement = document.getElementById('last-update-time');
+        if (lastUpdateElement) {
+            lastUpdateElement.textContent = formatRelativeTime(lastUpdateElement.dataset.originalTime);
         }
         
-        // Update the next update time countdown
-        function updateNextUpdateTime() {
-            const now = new Date();
-            const timeUntilUpdate = nextUpdateTime - now;
-            
-            if (timeUntilUpdate <= 0) {
-                // Time for an update
-                document.getElementById('next-update-time').textContent = 'Updating...';
-                nextUpdateTime = new Date(now.getTime() + refreshInterval);
-            } else {
-                const seconds = Math.floor(timeUntilUpdate / 1000);
-                document.getElementById('next-update-time').textContent = `${seconds}s`;
-            }
-        }
+        updateNextUpdateTime();
+    }
+    
+    // Update the server cards with new data
+    function updateServerCards(data) {
+        const serversContainer = document.getElementById('servers-container');
+        serversContainer.innerHTML = '';
         
-        // Update the relative time displays
-        function updateRelativeTimes() {
-            const lastUpdateElement = document.getElementById('last-update-time');
-            if (lastUpdateElement) {
-                lastUpdateElement.textContent = formatRelativeTime(lastUpdateElement.dataset.originalTime);
-            }
+        data.forEach(item => {
+            const playerPercentage = item.maxPlayers > 0 ? (item.currentPlayers / item.maxPlayers) * 100 : 0;
             
-            updateNextUpdateTime();
-        }
-        
-        // Update the server cards with new data
-        function updateServerCards(data) {
-            const serversContainer = document.getElementById('servers-container');
-            serversContainer.innerHTML = '';
+            const serverCard = document.createElement('div');
+            serverCard.className = 'server-card';
+            serverCard.dataset.jobid = item.jobId;
             
-            data.forEach(item => {
-                const serverCard = document.createElement('div');
-                serverCard.className = 'server-card';
-                serverCard.dataset.jobid = item.jobId;
-                
-                const playerPercentage = (item.currentPlayers / item.maxPlayers) * 100;
-                
-                serverCard.innerHTML = `
-                    <div class="server-header">
+            serverCard.innerHTML = `
+                <div class="server-header">
+                    <div>
+                        <div class="server-name">${item.name}</div>
                         <div>
-                            <div class="server-name">${item.name}</div>
-                            <div>
-                                <span class="server-status">Online</span>
+                            <span class="server-status">Online</span>
+                        </div>
+                    </div>
+                    <div class="money-value">${item.moneyPerSec}/s</div>
+                </div>
+                
+                <div class="server-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Players</span>
+                        <span class="detail-value players-value">
+                            ${item.players}
+                            <div class="players-progress">
+                                <div class="players-progress-fill" style="width: ${playerPercentage}%;"></div>
                             </div>
-                        </div>
-                        <div class="money-value">${item.moneyPerSec}/s</div>
+                        </span>
                     </div>
-                    
-                    <div class="server-details">
-                        <div class="detail-item">
-                            <span class="detail-label">Players</span>
-                            <span class="detail-value players-value">
-                                ${item.players}
-                                <div class="players-progress">
-                                    <div class="players-progress-fill" style="width: ${playerPercentage}%;"></div>
-                                </div>
-                            </span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Job ID</span>
-                            <span class="detail-value">${item.jobId.substring(0, 8)}...</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Source</span>
-                            <span class="detail-value">${item.source}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Last Seen</span>
-                            <span class="detail-value">${item.timeAgo}</span>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Job ID</span>
+                        <span class="detail-value">${item.jobId.substring(0, 8)}...</span>
                     </div>
-                    
-                    <a href="${item.joinLink}" target="_blank" class="join-button">Join Server</a>
-                `;
+                    <div class="detail-item">
+                        <span class="detail-label">Source</span>
+                        <span class="detail-value">${item.source}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Last Seen</span>
+                        <span class="detail-value">${item.timeAgo}</span>
+                    </div>
+                </div>
                 
-                serversContainer.appendChild(serverCard);
-            });
-        }
-        
-        // Update the stats with new data
-        function updateStats(data) {
-            const totalServers = data.length;
-            const totalPlayers = data.reduce((sum, item) => sum + item.currentPlayers, 0);
-            const totalCapacity = data.reduce((sum, item) => sum + item.maxPlayers, 0);
+                <a href="${item.joinLink}" target="_blank" class="join-button">Join Server</a>
+            `;
             
-            document.getElementById('total-servers').textContent = totalServers;
-            document.getElementById('total-players').textContent = `${totalPlayers}/${totalCapacity}`;
-        }
-        
-        // Refresh data from the server
-        function refreshData() {
-            document.getElementById('refresh-spinner').style.display = 'inline-block';
-            document.getElementById('refresh-text').textContent = 'Refreshing data...';
-            
-            fetch('/data')
-                .then(response => response.json())
-                .then(data => {
-                    // Update the last update time
-                    const now = new Date();
-                    const lastUpdateElement = document.getElementById('last-update-time');
-                    lastUpdateElement.textContent = now.toLocaleString();
-                    lastUpdateElement.dataset.originalTime = now.toISOString();
-                    
-                    // Update the server cards and stats
-                    updateServerCards(data);
-                    updateStats(data);
-                    
-                    // Reset the next update time
-                    nextUpdateTime = new Date(now.getTime() + refreshInterval);
-                    
-                    document.getElementById('refresh-text').textContent = 
-                        `Auto refresh enabled ({{ update_interval }}s)`;
-                })
-                .catch(error => {
-                    console.error('Error refreshing data:', error);
-                    document.getElementById('refresh-text').textContent = 'Error refreshing data';
-                    setTimeout(() => {
-                        document.getElementById('refresh-text').textContent = 
-                            `Auto refresh enabled ({{ update_interval }}s)`;
-                    }, 2000);
-                })
-                .finally(() => {
-                    document.getElementById('refresh-spinner').style.display = 'none';
-                });
-        }
-        
-        // Toggle auto refresh
-        function toggleAutoRefresh() {
-            autoRefreshEnabled = !autoRefreshEnabled;
-            const statusElement = document.getElementById('auto-refresh-status');
-            
-            if (autoRefreshEnabled) {
-                statusElement.textContent = 'On';
-                document.getElementById('refresh-text').textContent = 
-                    `Auto refresh enabled ({{ update_interval }}s)`;
-                startAutoRefresh();
-            } else {
-                statusElement.textContent = 'Off';
-                document.getElementById('refresh-text').textContent = 'Auto refresh disabled';
-                clearTimeout(refreshTimer);
-            }
-        }
-        
-        // Start the auto refresh timer
-        function startAutoRefresh() {
-            if (autoRefreshEnabled) {
-                // Set the next update time
-                nextUpdateTime = new Date(new Date().getTime() + refreshInterval);
-                
-                // Update the countdown every second
-                setInterval(updateNextUpdateTime, 1000);
-                
-                // Set the refresh timer
-                refreshTimer = setTimeout(() => {
-                    refreshData();
-                    startAutoRefresh(); // Restart the timer
-                }, refreshInterval);
-            }
-        }
-        
-        // Initialize the page
-        document.addEventListener('DOMContentLoaded', function() {
-            // Store the original time for relative time calculation
-            const lastUpdateElement = document.getElementById('last-update-time');
-            if (lastUpdateElement) {
-                lastUpdateElement.dataset.originalTime = lastUpdateElement.textContent;
-                updateRelativeTimes();
-            }
-            
-            // Update relative times every minute
-            setInterval(updateRelativeTimes, 60000);
-            
-            // Start auto refresh and countdown
-            startAutoRefresh();
+            serversContainer.appendChild(serverCard);
         });
-    </script>
+    }
+    
+    // Update the stats with new data
+    function updateStats(data) {
+        const totalServers = data.length;
+        const totalPlayers = data.reduce((sum, item) => sum + (item.currentPlayers || 0), 0);
+        const totalCapacity = data.reduce((sum, item) => sum + (item.maxPlayers || 0), 0);
+        
+        document.getElementById('total-servers').textContent = totalServers;
+        document.getElementById('total-players').textContent = `${totalPlayers}/${totalCapacity}`;
+    }
+    
+    // Refresh data from the server
+    function refreshData() {
+        document.getElementById('refresh-spinner').style.display = 'inline-block';
+        document.getElementById('refresh-text').textContent = 'Refreshing data...';
+        
+        fetch('/data')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update the last update time
+                const now = new Date();
+                const lastUpdateElement = document.getElementById('last-update-time');
+                lastUpdateElement.textContent = now.toLocaleString();
+                lastUpdateElement.dataset.originalTime = now.toISOString();
+                
+                // Update the server cards and stats
+                updateServerCards(data);
+                updateStats(data);
+                
+                // Reset the next update time
+                nextUpdateTime = new Date(now.getTime() + refreshInterval);
+                
+                document.getElementById('refresh-text').textContent = 
+                    `Auto refresh enabled (${refreshInterval/1000}s)`;
+            })
+            .catch(error => {
+                console.error('Error refreshing data:', error);
+                document.getElementById('refresh-text').textContent = 'Error refreshing data';
+                setTimeout(() => {
+                    document.getElementById('refresh-text').textContent = 
+                        `Auto refresh enabled (${refreshInterval/1000}s)`;
+                }, 2000);
+            })
+            .finally(() => {
+                document.getElementById('refresh-spinner').style.display = 'none';
+            });
+    }
+    
+    // Toggle auto refresh
+    function toggleAutoRefresh() {
+        autoRefreshEnabled = !autoRefreshEnabled;
+        const statusElement = document.getElementById('auto-refresh-status');
+        
+        if (autoRefreshEnabled) {
+            statusElement.textContent = 'On';
+            document.getElementById('refresh-text').textContent = 
+                `Auto refresh enabled (${refreshInterval/1000}s)`;
+            startAutoRefresh();
+        } else {
+            statusElement.textContent = 'Off';
+            document.getElementById('refresh-text').textContent = 'Auto refresh disabled';
+            clearTimeout(refreshTimer);
+            if (countdownInterval) clearInterval(countdownInterval);
+        }
+    }
+    
+    // Start the auto refresh timer
+    function startAutoRefresh() {
+        if (autoRefreshEnabled) {
+            // Clear any existing intervals
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            // Set the next update time
+            nextUpdateTime = new Date(new Date().getTime() + refreshInterval);
+            
+            // Update the countdown every second
+            countdownInterval = setInterval(updateNextUpdateTime, 1000);
+            
+            // Set the refresh timer
+            refreshTimer = setTimeout(() => {
+                refreshData();
+                startAutoRefresh(); // Restart the timer
+            }, refreshInterval);
+        }
+    }
+    
+    // Initialize the page
+    document.addEventListener('DOMContentLoaded', function() {
+        // Store the original time for relative time calculation
+        const lastUpdateElement = document.getElementById('last-update-time');
+        if (lastUpdateElement) {
+            lastUpdateElement.dataset.originalTime = lastUpdateElement.textContent;
+            updateRelativeTimes();
+        }
+        
+        // Update relative times every minute
+        setInterval(updateRelativeTimes, 60000);
+        
+        // Start auto refresh and countdown
+        startAutoRefresh();
+        
+        // Initial countdown update
+        updateNextUpdateTime();
+    });
+</script>
 </body>
 </html>
