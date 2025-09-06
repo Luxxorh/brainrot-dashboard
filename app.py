@@ -68,9 +68,12 @@ def fetch_brainrots_data():
     """Fetch data from the brainrots endpoint"""
     try:
         headers = get_headers()
+        print(f"Fetching data from brainrots API with User-Agent: {headers['User-Agent']}")
         response = requests.get("https://brainrotss.up.railway.app/brainrots", timeout=10, headers=headers)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        print(f"Successfully fetched {len(data)} servers from brainrots API")
+        return data
     except requests.exceptions.RequestException as e:
         print(f"Error fetching brainrots data: {e}")
         # Return sample data if the API is not available
@@ -78,6 +81,7 @@ def fetch_brainrots_data():
 
 def get_sample_data():
     """Return sample data when the API is not available"""
+    print("Using sample data as fallback")
     return [
         {
             "name": "Sample Server 1",
@@ -103,15 +107,19 @@ def update_brainrots_data():
     """Update brainrots data periodically"""
     global brainrots_data, last_update_time
     
+    print("Starting brainrots data update thread")
+    
     # Initial data fetch
     try:
         new_brainrots = fetch_brainrots_data()
         if new_brainrots:
             brainrots_data = new_brainrots
             last_update_time = datetime.now()
-            print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+            print(f"Initial brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+        else:
+            print("No data received from initial fetch")
     except Exception as e:
-        print(f"Error updating brainrots data: {e}")
+        print(f"Error in initial brainrots data update: {e}")
         # Initialize with sample data if there's an error
         brainrots_data = get_sample_data()
         last_update_time = datetime.now()
@@ -119,15 +127,18 @@ def update_brainrots_data():
     # Continue with periodic updates
     while True:
         try:
+            print(f"Waiting {update_interval} seconds before next update...")
+            time.sleep(update_interval)
+            
             new_brainrots = fetch_brainrots_data()
             if new_brainrots:
                 brainrots_data = new_brainrots
                 last_update_time = datetime.now()
                 print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+            else:
+                print("No data received from periodic fetch")
         except Exception as e:
-            print(f"Error updating brainrots data: {e}")
-        
-        time.sleep(update_interval)
+            print(f"Error in periodic brainrots data update: {e}")
 
 def process_data():
     """Process brainrots data"""
@@ -207,13 +218,17 @@ def dashboard():
     """Main dashboard route"""
     global brainrots_data, last_update_time
     
+    print("Dashboard accessed")
+    
     # If no data has been fetched yet, try to fetch it now
     if not brainrots_data:
+        print("No data available, fetching initial data")
         try:
             initial_data = fetch_brainrots_data()
             if initial_data:
                 brainrots_data = initial_data
                 last_update_time = datetime.now()
+                print(f"Initial data fetched: {len(brainrots_data)} servers")
         except Exception as e:
             print(f"Error fetching initial data: {e}")
     
@@ -230,6 +245,8 @@ def dashboard():
     else:
         last_update_str = "Never"
     
+    print(f"Rendering dashboard with {total_servers} servers, {total_players} players")
+    
     return render_template('dashboard.html', 
                          data=processed_data,
                          total_servers=total_servers,
@@ -241,12 +258,14 @@ def dashboard():
 @app.route('/data')
 def data_api():
     """API endpoint to get processed data as JSON"""
+    print("Data API accessed")
     processed_data = process_data()
     return jsonify(processed_data)
 
 @app.route('/stats')
 def stats_api():
     """API endpoint to get stats as JSON"""
+    print("Stats API accessed")
     processed_data = process_data()
     
     total_servers = len(processed_data)
@@ -261,7 +280,9 @@ def stats_api():
         "update_interval": update_interval
     })
 
-# Start the data update thread
+# Start the data update thread when the app starts
+print("Initializing Brainrot Server Dashboard")
 brainrot_thread = threading.Thread(target=update_brainrots_data)
 brainrot_thread.daemon = True
 brainrot_thread.start()
+print("Data update thread started")
