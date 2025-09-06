@@ -205,13 +205,13 @@ def process_data():
 @app.route('/')
 def dashboard():
     """Main dashboard route"""
+    global brainrots_data, last_update_time
+    
     # If no data has been fetched yet, try to fetch it now
     if not brainrots_data:
         try:
-            global last_update_time
             initial_data = fetch_brainrots_data()
             if initial_data:
-                global brainrots_data
                 brainrots_data = initial_data
                 last_update_time = datetime.now()
         except Exception as e:
