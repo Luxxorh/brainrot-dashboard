@@ -73,12 +73,50 @@ def fetch_brainrots_data():
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error fetching brainrots data: {e}")
-        return []
+        # Return sample data if the API is not available
+        return get_sample_data()
+
+def get_sample_data():
+    """Return sample data when the API is not available"""
+    return [
+        {
+            "name": "Sample Server 1",
+            "serverId": "123456789",
+            "jobId": "job1234567890",
+            "players": "5/10",
+            "moneyPerSec": "$100",
+            "lastSeen": int(time.time() * 1000) - 60000,  # 1 minute ago
+            "source": "Sample"
+        },
+        {
+            "name": "Sample Server 2",
+            "serverId": "987654321",
+            "jobId": "job0987654321",
+            "players": "8/12",
+            "moneyPerSec": "$150",
+            "lastSeen": int(time.time() * 1000) - 120000,  # 2 minutes ago
+            "source": "Sample"
+        }
+    ]
 
 def update_brainrots_data():
     """Update brainrots data periodically"""
     global brainrots_data, last_update_time
     
+    # Initial data fetch
+    try:
+        new_brainrots = fetch_brainrots_data()
+        if new_brainrots:
+            brainrots_data = new_brainrots
+            last_update_time = datetime.now()
+            print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+    except Exception as e:
+        print(f"Error updating brainrots data: {e}")
+        # Initialize with sample data if there's an error
+        brainrots_data = get_sample_data()
+        last_update_time = datetime.now()
+    
+    # Continue with periodic updates
     while True:
         try:
             new_brainrots = fetch_brainrots_data()
@@ -98,8 +136,8 @@ def process_data():
     processed_data = []
     
     for brainrot in brainrots_data:
-        job_id = brainrot.get("jobId")
-        server_id = brainrot.get("serverId")
+        job_id = brainrot.get("jobId", "unknown")
+        server_id = brainrot.get("serverId", "unknown")
         
         # Create join link
         place_id = server_id  # Using serverId as placeId
@@ -167,6 +205,18 @@ def process_data():
 @app.route('/')
 def dashboard():
     """Main dashboard route"""
+    # If no data has been fetched yet, try to fetch it now
+    if not brainrots_data:
+        try:
+            global last_update_time
+            initial_data = fetch_brainrots_data()
+            if initial_data:
+                global brainrots_data
+                brainrots_data = initial_data
+                last_update_time = datetime.now()
+        except Exception as e:
+            print(f"Error fetching initial data: {e}")
+    
     processed_data = process_data()
     
     # Calculate stats
