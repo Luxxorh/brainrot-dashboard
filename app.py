@@ -7,13 +7,17 @@ import threading
 import time
 import random
 import os
+import atexit
 from markupsafe import escape  # Correct import for escape
+from multiprocessing import Process, Manager
 
 app = Flask(__name__)
 
-# Global variables to store the fetched data
-brainrots_data = []
-last_update_time = None
+# Use multiprocessing Manager to share data between processes
+manager = Manager()
+brainrots_data = manager.list()
+last_update_time = manager.Value('d', 0)  # Store as timestamp
+
 # Get update interval from environment variable or default to 2 seconds
 update_interval = int(os.environ.get('UPDATE_INTERVAL', 2))
 
@@ -103,38 +107,37 @@ def get_sample_data():
         }
     ]
 
-def update_brainrots_data():
-    """Update brainrots data periodically"""
-    global brainrots_data, last_update_time
-    
-    print("Starting brainrots data update thread")
+def update_brainrots_data_worker(data_list, last_update):
+    """Update brainrots data periodically in a separate process"""
+    print("Starting brainrots data update process")
     
     # Initial data fetch
     try:
         new_brainrots = fetch_brainrots_data()
         if new_brainrots:
-            brainrots_data = new_brainrots
-            last_update_time = datetime.now()
-            print(f"Initial brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+            # Clear and update the shared list
+            data_list[:] = new_brainrots
+            last_update.value = time.time()
+            print(f"Initial brainrots data updated at {datetime.fromtimestamp(last_update.value)}. Servers: {len(data_list)}")
         else:
             print("No data received from initial fetch")
     except Exception as e:
         print(f"Error in initial brainrots data update: {e}")
         # Initialize with sample data if there's an error
-        brainrots_data = get_sample_data()
-        last_update_time = datetime.now()
+        data_list[:] = get_sample_data()
+        last_update.value = time.time()
     
     # Continue with periodic updates
     while True:
         try:
-            print(f"Waiting {update_interval} seconds before next update...")
             time.sleep(update_interval)
             
             new_brainrots = fetch_brainrots_data()
             if new_brainrots:
-                brainrots_data = new_brainrots
-                last_update_time = datetime.now()
-                print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
+                # Clear and update the shared list
+                data_list[:] = new_brainrots
+                last_update.value = time.time()
+                print(f"Brainrots data updated at {datetime.fromtimestamp(last_update.value)}. Servers: {len(data_list)}")
             else:
                 print("No data received from periodic fetch")
         except Exception as e:
@@ -142,11 +145,12 @@ def update_brainrots_data():
 
 def process_data():
     """Process brainrots data"""
-    global brainrots_data
-    
     processed_data = []
     
-    for brainrot in brainrots_data:
+    # Convert shared list to regular list for processing
+    current_data = list(brainrots_data)
+    
+    for brainrot in current_data:
         job_id = brainrot.get("jobId", "unknown")
         server_id = brainrot.get("serverId", "unknown")
         
@@ -213,24 +217,41 @@ def process_data():
     
     return processed_data
 
+# Global variable to track the data update process
+data_update_process = None
+
+def start_data_update_process():
+    """Start the data update process"""
+    global data_update_process
+    if data_update_process is None or not data_update_process.is_alive():
+        data_update_process = Process(target=update_brainrots_data_worker, args=(brainrots_data, last_update_time))
+        data_update_process.daemon = True
+        data_update_process.start()
+        print("Data update process started")
+
+def stop_data_update_process():
+    """Stop the data update process"""
+    global data_update_process
+    if data_update_process and data_update_process.is_alive():
+        data_update_process.terminate()
+        data_update_process.join()
+        print("Data update process stopped")
+
+# Register cleanup function
+atexit.register(stop_data_update_process)
+
+@app.before_first_request
+def before_first_request():
+    """Initialize data update process before first request"""
+    start_data_update_process()
+
 @app.route('/')
 def dashboard():
     """Main dashboard route"""
-    global brainrots_data, last_update_time
-    
     print("Dashboard accessed")
     
-    # If no data has been fetched yet, try to fetch it now
-    if not brainrots_data:
-        print("No data available, fetching initial data")
-        try:
-            initial_data = fetch_brainrots_data()
-            if initial_data:
-                brainrots_data = initial_data
-                last_update_time = datetime.now()
-                print(f"Initial data fetched: {len(brainrots_data)} servers")
-        except Exception as e:
-            print(f"Error fetching initial data: {e}")
+    # Start data update process if not running
+    start_data_update_process()
     
     processed_data = process_data()
     
@@ -240,8 +261,8 @@ def dashboard():
     total_capacity = sum(item["maxPlayers"] for item in processed_data)
     
     # Format last update time
-    if last_update_time:
-        last_update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
+    if last_update_time.value > 0:
+        last_update_str = datetime.fromtimestamp(last_update_time.value).strftime('%Y-%m-%d %H:%M:%S')
     else:
         last_update_str = "Never"
     
@@ -276,13 +297,11 @@ def stats_api():
         "total_servers": total_servers,
         "total_players": total_players,
         "total_capacity": total_capacity,
-        "last_update": last_update_time.strftime('%Y-%m-%d %H:%M:%S') if last_update_time else "Never",
+        "last_update": datetime.fromtimestamp(last_update_time.value).strftime('%Y-%m-%d %H:%M:%S') if last_update_time.value > 0 else "Never",
         "update_interval": update_interval
     })
 
-# Start the data update thread when the app starts
+# Start the data update process when the app starts
 print("Initializing Brainrot Server Dashboard")
-brainrot_thread = threading.Thread(target=update_brainrots_data)
-brainrot_thread.daemon = True
-brainrot_thread.start()
-print("Data update thread started")
+start_data_update_process()
+print("Brainrot Server Dashboard initialized")
