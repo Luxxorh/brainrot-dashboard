@@ -7,7 +7,6 @@ import threading
 import time
 import random
 import os
-import atexit
 from markupsafe import escape  # Correct import for escape
 
 app = Flask(__name__)
@@ -17,6 +16,9 @@ brainrots_data = []
 last_update_time = None
 # Get update interval from environment variable or default to 2 seconds
 update_interval = int(os.environ.get('UPDATE_INTERVAL', 2))
+
+# Lock for thread-safe access to shared data
+data_lock = threading.Lock()
 
 # Comprehensive list of User Agents to rotate through
 USER_AGENTS = [
@@ -118,16 +120,18 @@ def update_brainrots_data():
     try:
         new_brainrots = fetch_brainrots_data()
         if new_brainrots:
-            brainrots_data = new_brainrots
-            last_update_time = datetime.now()
+            with data_lock:
+                brainrots_data = new_brainrots
+                last_update_time = datetime.now()
             print(f"Initial brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
         else:
             print("No data received from initial fetch")
     except Exception as e:
         print(f"Error in initial brainrots data update: {e}")
         # Initialize with sample data if there's an error
-        brainrots_data = get_sample_data()
-        last_update_time = datetime.now()
+        with data_lock:
+            brainrots_data = get_sample_data()
+            last_update_time = datetime.now()
     
     # Continue with periodic updates
     while True:
@@ -136,8 +140,9 @@ def update_brainrots_data():
             
             new_brainrots = fetch_brainrots_data()
             if new_brainrots:
-                brainrots_data = new_brainrots
-                last_update_time = datetime.now()
+                with data_lock:
+                    brainrots_data = new_brainrots
+                    last_update_time = datetime.now()
                 print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
             else:
                 print("No data received from periodic fetch")
@@ -159,9 +164,13 @@ def process_data():
     """Process brainrots data"""
     global brainrots_data
     
+    with data_lock:
+        current_data = brainrots_data.copy()
+        current_last_update = last_update_time
+    
     processed_data = []
     
-    for brainrot in brainrots_data:
+    for brainrot in current_data:
         job_id = brainrot.get("jobId", "unknown")
         server_id = brainrot.get("serverId", "unknown")
         
@@ -226,31 +235,17 @@ def process_data():
     
     processed_data.sort(key=lambda x: money_to_numeric(x["moneyPerSec"]), reverse=True)
     
-    return processed_data
+    return processed_data, current_last_update
 
 @app.route('/')
 def dashboard():
     """Main dashboard route"""
-    global brainrots_data, last_update_time
-    
     print("Dashboard accessed")
     
     # Start data update thread if not running
     start_data_update_thread()
     
-    # If no data has been fetched yet, try to fetch it now
-    if not brainrots_data:
-        print("No data available, fetching initial data")
-        try:
-            initial_data = fetch_brainrots_data()
-            if initial_data:
-                brainrots_data = initial_data
-                last_update_time = datetime.now()
-                print(f"Initial data fetched: {len(brainrots_data)} servers")
-        except Exception as e:
-            print(f"Error fetching initial data: {e}")
-    
-    processed_data = process_data()
+    processed_data, current_last_update = process_data()
     
     # Calculate stats
     total_servers = len(processed_data)
@@ -258,8 +253,8 @@ def dashboard():
     total_capacity = sum(item["maxPlayers"] for item in processed_data)
     
     # Format last update time
-    if last_update_time:
-        last_update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
+    if current_last_update:
+        last_update_str = current_last_update.strftime('%Y-%m-%d %H:%M:%S')
     else:
         last_update_str = "Never"
     
@@ -277,14 +272,14 @@ def dashboard():
 def data_api():
     """API endpoint to get processed data as JSON"""
     print("Data API accessed")
-    processed_data = process_data()
+    processed_data, _ = process_data()
     return jsonify(processed_data)
 
 @app.route('/stats')
 def stats_api():
     """API endpoint to get stats as JSON"""
     print("Stats API accessed")
-    processed_data = process_data()
+    processed_data, current_last_update = process_data()
     
     total_servers = len(processed_data)
     total_players = sum(item["currentPlayers"] for item in processed_data)
@@ -294,7 +289,7 @@ def stats_api():
         "total_servers": total_servers,
         "total_players": total_players,
         "total_capacity": total_capacity,
-        "last_update": last_update_time.strftime('%Y-%m-%d %H:%M:%S') if last_update_time else "Never",
+        "last_update": current_last_update.strftime('%Y-%m-%d %H:%M:%S') if current_last_update else "Never",
         "update_interval": update_interval
     })
 
