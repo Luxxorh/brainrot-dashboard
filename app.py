@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import os
 from flask import Flask, render_template, jsonify
 import requests
 import json
@@ -7,22 +6,43 @@ from datetime import datetime, timedelta
 import threading
 import time
 import random
-from markupsafe import escape
+import os
+from markupsafe import escape  # Correct import for escape
 
 app = Flask(__name__)
 
 # Global variables to store the fetched data
 brainrots_data = []
 last_update_time = None
-update_interval = int(os.environ.get('UPDATE_INTERVAL', 5))  # Increased to 5 seconds
+# Get update interval from environment variable or default to 2 seconds
+update_interval = int(os.environ.get('UPDATE_INTERVAL', 2))
 
 # Comprehensive list of User Agents to rotate through
 USER_AGENTS = [
+    # Windows - Chrome
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+    
+    # Windows - Firefox
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+    
+    # macOS - Safari
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+    
+    # macOS - Chrome
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    
+    # Linux - Chrome
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    
+    # Mobile - iOS Safari
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+    
+    # Mobile - Android Chrome
+    "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.210 Mobile Safari/537.36",
 ]
 
 # Track which User Agent was used last to ensure rotation
@@ -48,22 +68,16 @@ def fetch_brainrots_data():
     """Fetch data from the brainrots endpoint"""
     try:
         headers = get_headers()
-        # Increased timeout for Render deployment
         response = requests.get("https://brainrotss.up.railway.app/brainrots", timeout=10, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error fetching brainrots data: {e}")
         return []
-    except Exception as e:
-        print(f"Unexpected error in fetch_brainrots_data: {e}")
-        return []
 
 def update_brainrots_data():
     """Update brainrots data periodically"""
     global brainrots_data, last_update_time
-    
-    print("Brainrot data update thread started")
     
     while True:
         try:
@@ -72,8 +86,6 @@ def update_brainrots_data():
                 brainrots_data = new_brainrots
                 last_update_time = datetime.now()
                 print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
-            else:
-                print("No brainrot data received from API")
         except Exception as e:
             print(f"Error updating brainrots data: {e}")
         
@@ -85,63 +97,54 @@ def process_data():
     
     processed_data = []
     
-    # If no data is available, return empty list
-    if not brainrots_data:
-        print("No brainrot data available for processing")
-        return processed_data
-    
     for brainrot in brainrots_data:
+        job_id = brainrot.get("jobId")
+        server_id = brainrot.get("serverId")
+        
+        # Create join link
+        place_id = server_id  # Using serverId as placeId
+        join_link = f"https://www.roblox.com/games/{place_id}/Steal-a-Brainrot?serverJobId={job_id}"
+        
+        # Convert lastSeen timestamp to readable format
+        last_seen_ts = brainrot.get("lastSeen", 0)
+        if last_seen_ts:
+            last_seen = datetime.fromtimestamp(last_seen_ts / 1000).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            last_seen = "Unknown"
+        
+        # Calculate time since last seen
+        if last_seen_ts:
+            time_since = (datetime.now() - datetime.fromtimestamp(last_seen_ts / 1000)).total_seconds()
+            minutes_since = int(time_since // 60)
+            seconds_since = int(time_since % 60)
+            time_ago = f"{minutes_since}m {seconds_since}s ago"
+        else:
+            time_ago = "Unknown"
+        
+        # Parse players count
+        players_str = brainrot.get("players", "0/0")
         try:
-            job_id = brainrot.get("jobId", "")
-            server_id = brainrot.get("serverId", "")
-            
-            # Create join link
-            place_id = server_id  # Using serverId as placeId
-            join_link = f"https://www.roblox.com/games/{place_id}/Steal-a-Brainrot?serverJobId={job_id}"
-            
-            # Convert lastSeen timestamp to readable format
-            last_seen_ts = brainrot.get("lastSeen", 0)
-            if last_seen_ts:
-                last_seen = datetime.fromtimestamp(last_seen_ts / 1000).strftime('%Y-%m-%d %H:%M:%S')
-            else:
-                last_seen = "Unknown"
-            
-            # Calculate time since last seen
-            if last_seen_ts:
-                time_since = (datetime.now() - datetime.fromtimestamp(last_seen_ts / 1000)).total_seconds()
-                minutes_since = int(time_since // 60)
-                seconds_since = int(time_since % 60)
-                time_ago = f"{minutes_since}m {seconds_since}s ago"
-            else:
-                time_ago = "Unknown"
-            
-            # Parse players count
-            players_str = brainrot.get("players", "0/0")
-            try:
-                current_players, max_players = map(int, players_str.split('/'))
-            except:
-                current_players, max_players = 0, 0
-            
-            # Escape HTML in the name to prevent XSS and rendering issues
-            name = str(escape(brainrot.get("name", "Unknown")))
-            money_per_sec = str(escape(brainrot.get("moneyPerSec", "$0")))
-            
-            processed_data.append({
-                "name": name,
-                "serverId": server_id,
-                "jobId": job_id,
-                "players": players_str,
-                "currentPlayers": current_players,
-                "maxPlayers": max_players,
-                "moneyPerSec": money_per_sec,
-                "lastSeen": last_seen,
-                "timeAgo": time_ago,
-                "source": brainrot.get("source", "Unknown"),
-                "joinLink": join_link,
-            })
-        except Exception as e:
-            print(f"Error processing brainrot data: {e}")
-            continue
+            current_players, max_players = map(int, players_str.split('/'))
+        except:
+            current_players, max_players = 0, 0
+        
+        # Escape HTML in the name to prevent XSS and rendering issues
+        name = str(escape(brainrot.get("name", "Unknown")))
+        money_per_sec = str(escape(brainrot.get("moneyPerSec", "$0")))
+        
+        processed_data.append({
+            "name": name,
+            "serverId": server_id,
+            "jobId": job_id,
+            "players": players_str,
+            "currentPlayers": current_players,
+            "maxPlayers": max_players,
+            "moneyPerSec": money_per_sec,
+            "lastSeen": last_seen,
+            "timeAgo": time_ago,
+            "source": brainrot.get("source", "Unknown"),
+            "joinLink": join_link,
+        })
     
     # Sort by money per second (convert to numeric value for sorting)
     def money_to_numeric(money_str):
@@ -209,28 +212,6 @@ def stats_api():
     })
 
 # Start the data update thread
-def start_update_thread():
-    """Start the brainrot data update thread"""
-    try:
-        brainrot_thread = threading.Thread(target=update_brainrots_data)
-        brainrot_thread.daemon = True
-        brainrot_thread.start()
-        print("Brainrot update thread started successfully")
-        return True
-    except Exception as e:
-        print(f"Failed to start brainrot update thread: {e}")
-        return False
-
-# Initialize the application
-with app.app_context():
-    # Try to start the update thread
-    thread_started = start_update_thread()
-    if not thread_started:
-        print("Warning: Could not start background update thread")
-
-if __name__ == '__main__':
-    # Use PORT environment variable if available, otherwise default to 5000
-    port = int(os.environ.get('PORT', 5000))
-    # Only run in debug mode if explicitly set
-    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(debug=debug, host='0.0.0.0', port=port)
+brainrot_thread = threading.Thread(target=update_brainrots_data)
+brainrot_thread.daemon = True
+brainrot_thread.start()
