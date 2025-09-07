@@ -14,8 +14,32 @@ app = Flask(__name__)
 # Global variables to store the fetched data
 brainrots_data = []
 last_update_time = None
-update_interval = int(os.environ.get('UPDATE_INTERVAL', 30))  # Increased to 30 seconds for Render
-data_lock = threading.Lock()
+update_interval = int(os.environ.get('UPDATE_INTERVAL', 5))  # Update brainrot data every 5 seconds
+
+# Brainrot God rarity brainrots
+BRAINROT_GOD_NAMES = [
+    "Cocofanto Elefanto", "Girafa Celestre", "Tralalero Tralala", 
+    "Los Crocodillitos", "Tigroligre Frutonni", "Odin Din Din Dun", 
+    "Pakrahmatmamat", "Brr es Teh Patipum", "Tartaruga Cisterna", 
+    "Orcalero Orcala", "Tralalita Tralala", "Los Orcalitos", 
+    "Tukanno Bananno", "Trenostruzzo Turbo 3000", "Trippi Troppi Troppa Trippa", 
+    "Ballerino Lololo", "Bulbito Bandito Traktorito", "Los Tungtungtungcitos", 
+    "Piccione Macchina", "Crabbo Limonetta", "Cacasito Satalito", 
+    "Chihuanini Taconini"
+]
+
+# Secret rarity brainrots
+SECRET_NAMES = [
+    "La Vacca Saturno Saturnita", "Torrtuginni Dragonfrutini", 
+    "Agarrini La Palini", "Los Tralaleritos", "Las Tralaleritas", 
+    "Job Job Job Sahur", "Las Vaquitas Saturnitas", "Ketupat Kepat", 
+    "Graipuss Medussi", "Pot Hotspot", "Chicleteira Bicicleteira", 
+    "La Grande Combinasion", "Los Combinasionas", "Nuclearo Dinossauro", 
+    "Bisonte Giuppitere", "Los Hotspotsitos", "Esok Sekolah", 
+    "Garama and Madundung", "Los Matteos", "Dragon Cannelloni", 
+    "Los Spyderinis", "La Supreme Combinasion", "Spaghetti Tualetti", 
+    "Guerriro Digitale"
+]
 
 # Comprehensive list of User Agents to rotate through
 USER_AGENTS = [
@@ -74,6 +98,9 @@ def fetch_brainrots_data():
     except requests.exceptions.RequestException as e:
         print(f"Error fetching brainrots data: {e}")
         return []
+    except Exception as e:
+        print(f"Unexpected error fetching data: {e}")
+        return []
 
 def update_brainrots_data():
     """Update brainrots data periodically"""
@@ -83,27 +110,42 @@ def update_brainrots_data():
         try:
             new_brainrots = fetch_brainrots_data()
             if new_brainrots:
-                with data_lock:
-                    brainrots_data = new_brainrots
+                brainrots_data = new_brainrots
                 last_update_time = datetime.now()
                 print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
             else:
-                print("No data received from brainrots API")
+                print("No brainrots data received from API")
         except Exception as e:
             print(f"Error updating brainrots data: {e}")
 
         time.sleep(update_interval)
 
+def money_to_numeric(money_str):
+    """Convert money string to numeric value for sorting"""
+    try:
+        # Remove HTML entities and symbols before processing
+        clean_str = money_str.replace('$', '').replace(' ', '').replace(',', '').replace('/s', '')
+        
+        # Handle cases where the value might have extra text like "/s"
+        if 'K' in clean_str:
+            return float(clean_str.replace('K', '')) * 1000
+        elif 'M' in clean_str:
+            return float(clean_str.replace('M', '')) * 1000000
+        elif 'B' in clean_str:
+            return float(clean_str.replace('B', '')) * 1000000000
+        else:
+            # Try to parse as a regular number
+            return float(clean_str)
+    except:
+        return 0
+
 def process_data():
     """Process brainrots data"""
     global brainrots_data
 
-    with data_lock:
-        current_data = brainrots_data.copy()
-
     processed_data = []
 
-    for brainrot in current_data:
+    for brainrot in brainrots_data:
         job_id = brainrot.get("jobId")
         server_id = brainrot.get("serverId")
 
@@ -137,112 +179,133 @@ def process_data():
         # Escape HTML in the name to prevent XSS and rendering issues
         name = str(escape(brainrot.get("name", "Unknown")))
         money_per_sec = str(escape(brainrot.get("moneyPerSec", "$0")))
+        
+        # Clean up moneyPerSec - remove any existing "/s" suffix to prevent double "/s"
+        if money_per_sec.endswith('/s'):
+            money_per_sec = money_per_sec[:-2]
+        
+        # Determine rarity based on name - only show Brainrot God or Secret
+        rarity = None
+        if name in BRAINROT_GOD_NAMES:
+            rarity = "Brainrot God"
+        elif name in SECRET_NAMES:
+            rarity = "Secret"
 
-        processed_data.append({
-            "name": name,
-            "serverId": server_id,
-            "jobId": job_id,
-            "players": players_str,
-            "currentPlayers": current_players,
-            "maxPlayers": max_players,
-            "moneyPerSec": money_per_sec,
-            "lastSeen": last_seen,
-            "timeAgo": time_ago,
-            "source": brainrot.get("source", "Unknown"),
-            "joinLink": join_link,
-        })
+        # Only include brainrots with special rarity
+        if rarity:
+            # Calculate numeric value for sorting
+            money_numeric = money_to_numeric(money_per_sec)
+            
+            processed_data.append({
+                "name": name,
+                "serverId": server_id,
+                "jobId": job_id,
+                "players": players_str,
+                "currentPlayers": current_players,
+                "maxPlayers": max_players,
+                "moneyPerSec": money_per_sec,  # This is now cleaned (no "/s")
+                "lastSeen": last_seen,
+                "timeAgo": time_ago,
+                "rarity": rarity,
+                "joinLink": join_link,
+                "moneyNumeric": money_numeric  # Add numeric value for sorting
+            })
 
-    # Sort by money per second (convert to numeric value for sorting)
-    def money_to_numeric(money_str):
-        try:
-            # Remove HTML entities before processing
-            clean_str = money_str.replace('$', '').replace(' ', '')
-            if 'K' in clean_str:
-                return float(clean_str.replace('K', '')) * 1000
-            elif 'M' in clean_str:
-                return float(clean_str.replace('M', '')) * 1000000
-            else:
-                return float(clean_str)
-        except:
-            return 0
-
-    processed_data.sort(key=lambda x: money_to_numeric(x["moneyPerSec"]), reverse=True)
+    # Sort by money per second (highest first) using the pre-calculated numeric value
+    processed_data.sort(key=lambda x: x["moneyNumeric"], reverse=True)
+    
+    # Remove the temporary numeric field before returning
+    for item in processed_data:
+        item.pop("moneyNumeric", None)
 
     return processed_data
 
 @app.route('/')
 def dashboard():
     """Main dashboard route"""
-    processed_data = process_data()
+    try:
+        processed_data = process_data()
 
-    # Calculate stats
-    total_servers = len(processed_data)
-    total_players = sum(item["currentPlayers"] for item in processed_data)
-    total_capacity = sum(item["maxPlayers"] for item in processed_data)
+        # Calculate stats
+        total_servers = len(processed_data)
+        total_players = sum(item["currentPlayers"] for item in processed_data)
+        total_capacity = sum(item["maxPlayers"] for item in processed_data)
 
-    # Format last update time
-    if last_update_time:
-        last_update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
-    else:
-        last_update_str = "Never"
+        # Format last update time
+        if last_update_time:
+            last_update_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            last_update_str = "Never"
 
-    return render_template('dashboard.html', 
-                         data=processed_data,
-                         total_servers=total_servers,
-                         total_players=total_players,
-                         total_capacity=total_capacity,
-                         last_update=last_update_str,
-                         update_interval=update_interval)
+        return render_template('dashboard.html', 
+                             data=processed_data,
+                             total_servers=total_servers,
+                             total_players=total_players,
+                             total_capacity=total_capacity,
+                             last_update=last_update_str,
+                             update_interval=update_interval)
+    except Exception as e:
+        print(f"Error in dashboard route: {e}")
+        return render_template('dashboard.html', 
+                             data=[],
+                             total_servers=0,
+                             total_players=0,
+                             total_capacity=0,
+                             last_update="Never",
+                             update_interval=update_interval)
 
 @app.route('/data')
 def data_api():
     """API endpoint to get processed data as JSON"""
-    processed_data = process_data()
-    return jsonify(processed_data)
+    try:
+        processed_data = process_data()
+        return jsonify(processed_data)
+    except Exception as e:
+        print(f"Error in data API: {e}")
+        return jsonify([])
 
 @app.route('/stats')
 def stats_api():
     """API endpoint to get stats as JSON"""
-    processed_data = process_data()
+    try:
+        processed_data = process_data()
 
-    total_servers = len(processed_data)
-    total_players = sum(item["currentPlayers"] for item in processed_data)
-    total_capacity = sum(item["maxPlayers"] for item in processed_data)
+        total_servers = len(processed_data)
+        total_players = sum(item["currentPlayers"] for item in processed_data)
+        total_capacity = sum(item["maxPlayers"] for item in processed_data)
 
-    return jsonify({
-        "total_servers": total_servers,
-        "total_players": total_players,
-        "total_capacity": total_capacity,
-        "last_update": last_update_time.strftime('%Y-%m-%d %H:%M:%S') if last_update_time else "Never",
-        "update_interval": update_interval
-    })
+        return jsonify({
+            "total_servers": total_servers,
+            "total_players": total_players,
+            "total_capacity": total_capacity,
+            "last_update": last_update_time.strftime('%Y-%m-%d %H:%M:%S') if last_update_time else "Never",
+            "update_interval": update_interval
+        })
+    except Exception as e:
+        print(f"Error in stats API: {e}")
+        return jsonify({
+            "total_servers": 0,
+            "total_players": 0,
+            "total_capacity": 0,
+            "last_update": "Never",
+            "update_interval": update_interval
+        })
 
-# Initialize data on startup
-def initialize_data():
-    """Fetch initial data when the app starts"""
-    global brainrots_data, last_update_time
-    print("Fetching initial brainrot data...")
-    initial_data = fetch_brainrots_data()
-    if initial_data:
-        brainrots_data = initial_data
-        last_update_time = datetime.now()
-        print(f"Initial data fetched. Servers: {len(brainrots_data)}")
-    else:
-        print("Failed to fetch initial data")
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Render"""
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 # Start the data update thread
-def start_background_thread():
-    """Start the background thread for data updates"""
-    # Only start if not already running and not in a gunicorn worker
-    if not any(thread.name == "brainrot_updater" for thread in threading.enumerate()):
-        brainrot_thread = threading.Thread(target=update_brainrots_data, name="brainrot_updater")
-        brainrot_thread.daemon = True
-        brainrot_thread.start()
-        print("Started brainrot data update thread")
+def start_update_thread():
+    """Start the background update thread"""
+    brainrot_thread = threading.Thread(target=update_brainrots_data)
+    brainrot_thread.daemon = True
+    brainrot_thread.start()
+    print("Background update thread started")
 
-# Initialize data and start thread when the app starts
-initialize_data()
-start_background_thread()
+# Start the update thread when the app starts
+start_update_thread()
 
 if __name__ == '__main__':
     # Use PORT environment variable if available, otherwise default to 5000
