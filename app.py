@@ -102,24 +102,6 @@ def fetch_brainrots_data():
         print(f"Unexpected error fetching data: {e}")
         return []
 
-def update_brainrots_data():
-    """Update brainrots data periodically"""
-    global brainrots_data, last_update_time
-
-    while True:
-        try:
-            new_brainrots = fetch_brainrots_data()
-            if new_brainrots:
-                brainrots_data = new_brainrots
-                last_update_time = datetime.now()
-                print(f"Brainrots data updated at {last_update_time}. Servers: {len(brainrots_data)}")
-            else:
-                print("No brainrots data received from API")
-        except Exception as e:
-            print(f"Error updating brainrots data: {e}")
-
-        time.sleep(update_interval)
-
 def money_to_numeric(money_str):
     """Convert money string to numeric value for sorting"""
     try:
@@ -220,10 +202,33 @@ def process_data():
 
     return processed_data
 
+# Fetch data on startup and before each request
+@app.before_first_request
+def startup():
+    """Fetch data when the app starts"""
+    global brainrots_data, last_update_time
+    try:
+        new_brainrots = fetch_brainrots_data()
+        if new_brainrots:
+            brainrots_data = new_brainrots
+            last_update_time = datetime.now()
+            print(f"Initial brainrots data loaded at {last_update_time}. Servers: {len(brainrots_data)}")
+        else:
+            print("No initial brainrots data received")
+    except Exception as e:
+        print(f"Error in startup data fetch: {e}")
+
 @app.route('/')
 def dashboard():
     """Main dashboard route"""
     try:
+        # Fetch fresh data on each request instead of using background thread
+        global brainrots_data, last_update_time
+        new_brainrots = fetch_brainrots_data()
+        if new_brainrots:
+            brainrots_data = new_brainrots
+            last_update_time = datetime.now()
+        
         processed_data = process_data()
 
         # Calculate stats
@@ -258,6 +263,12 @@ def dashboard():
 def data_api():
     """API endpoint to get processed data as JSON"""
     try:
+        # Fetch fresh data for API requests too
+        global brainrots_data
+        new_brainrots = fetch_brainrots_data()
+        if new_brainrots:
+            brainrots_data = new_brainrots
+        
         processed_data = process_data()
         return jsonify(processed_data)
     except Exception as e:
@@ -295,17 +306,6 @@ def stats_api():
 def health_check():
     """Health check endpoint for Render"""
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
-
-# Start the data update thread
-def start_update_thread():
-    """Start the background update thread"""
-    brainrot_thread = threading.Thread(target=update_brainrots_data)
-    brainrot_thread.daemon = True
-    brainrot_thread.start()
-    print("Background update thread started")
-
-# Start the update thread when the app starts
-start_update_thread()
 
 if __name__ == '__main__':
     # Use PORT environment variable if available, otherwise default to 5000
