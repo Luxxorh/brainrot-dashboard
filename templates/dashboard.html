@@ -601,7 +601,7 @@
         
         <div class="refresh-indicator">
             <div class="spinner" id="refresh-spinner"></div>
-            <span id="refresh-text">Auto refresh enabled ({{ update_interval }}s)</span>
+            <span id="refresh-text">Auto refresh enabled (2s)</span>
         </div>
     </div>
 
@@ -654,7 +654,7 @@
 
     <script>
         let autoRefreshEnabled = true;
-        let refreshInterval = {{ update_interval }} * 1000; // Convert to milliseconds
+        let refreshInterval = 2000; // Changed from 5000ms (5s) to 2000ms (2s)
         let refreshTimer;
         let nextUpdateTime = new Date();
         let currentFilter = 'all';
@@ -1006,14 +1006,14 @@
                     nextUpdateTime = new Date(now.getTime() + refreshInterval);
                     
                     document.getElementById('refresh-text').textContent = 
-                        `Auto refresh enabled ({{ update_interval }}s)`;
+                        `Auto refresh enabled (2s)`;
                 })
                 .catch(error => {
                     console.error('Error refreshing data:', error);
                     document.getElementById('refresh-text').textContent = 'Error refreshing data';
                     setTimeout(() => {
                         document.getElementById('refresh-text').textContent = 
-                            `Auto refresh enabled ({{ update_interval }}s)`;
+                            `Auto refresh enabled (2s)`;
                     }, 2000);
                 })
                 .finally(() => {
@@ -1029,7 +1029,7 @@
             if (autoRefreshEnabled) {
                 statusElement.textContent = 'On';
                 document.getElementById('refresh-text').textContent = 
-                    `Auto refresh enabled ({{ update_interval }}s)`;
+                    `Auto refresh enabled (2s)`;
                 startAutoRefresh();
             } else {
                 statusElement.textContent = 'Off';
