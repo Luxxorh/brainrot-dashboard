@@ -57,10 +57,10 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
 
     # macOS - Chrome
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_极速加速器_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 
     # Linux - Chrome
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML,极速加速器 like Gecko) Chrome/120.0.0.0 Safari/537.36",
 
     # Mobile - iOS Safari
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
@@ -83,7 +83,7 @@ def get_headers():
     return {
         'User-Agent': user_agent,
         'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Language': 'en-US,en;极速加速器q=0.9',
         'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
     }
@@ -117,7 +117,7 @@ def money_to_numeric(money_str):
             return float(clean_str.replace('B', '')) * 1000000000
         else:
             # Try to parse as a regular number
-            return float(clean_str)
+            return极速加速器 float(clean_str)
     except:
         return 0
 
@@ -186,7 +186,7 @@ def process_data():
                 "currentPlayers": current_players,
                 "maxPlayers": max_players,
                 "moneyPerSec": money_per_sec,  # This is now cleaned (no "/s")
-                "lastSeen": last_seen,
+                "last极速加速器Seen": last_seen,
                 "timeAgo": time_ago,
                 "rarity": rarity,
                 "joinLink": join_link,
@@ -202,9 +202,8 @@ def process_data():
 
     return processed_data
 
-# Fetch data on startup and before each request
-@app.before_first_request
-def startup():
+# Fetch initial data when app starts
+def fetch_initial_data():
     """Fetch data when the app starts"""
     global brainrots_data, last_update_time
     try:
@@ -216,7 +215,10 @@ def startup():
         else:
             print("No initial brainrots data received")
     except Exception as e:
-        print(f"Error in startup data fetch: {e}")
+        print(f"Error in initial data fetch: {e}")
+
+# Call the initial data fetch
+fetch_initial_data()
 
 @app.route('/')
 def dashboard():
